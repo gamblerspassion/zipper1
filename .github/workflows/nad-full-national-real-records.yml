@@ -3,6 +3,9 @@ on:
   push:
     branches: [stance-national-address-source-20261107]
     paths: ['.github/workflows/nad-full-national-real-records.yml']
+  pull_request:
+    branches: [internet4all-website]
+    paths: ['.github/workflows/nad-full-national-real-records.yml']
   workflow_dispatch:
 jobs:
   national-nad-address-import:
