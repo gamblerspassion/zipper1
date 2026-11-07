@@ -1,0 +1,85 @@
+name: Split verified Florida public address export into transferable parts
+on:
+  push:
+    branches: [stance-fill-missing-states-20261107]
+    paths: ['.github/workflows/stance-florida-split-export.yml']
+  pull_request:
+    branches: [internet4all-website]
+    paths: ['.github/workflows/stance-florida-split-export.yml']
+  workflow_dispatch:
+jobs:
+  split-existing-source-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Download already completed real Florida public address export
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p original
+          gh run download 42369037644 --repo gamblerspassion/zipper1 -n sparse-state-addresses-FL -D original
+          ls -lh original
+      - name: Partition compressed Florida CSV into independently readable verified files
+        run: |
+          python3 - <<'PY'
+          import csv,gzip,json,pathlib
+          root=pathlib.Path('original')
+          audit=json.loads((root/'STATE_AUDIT.json').read_text())
+          assert audit['status']=='COMPLETE' and audit['unique_public_address_records']==12127015
+          source=root/'OVERTURE_FL_SUPPLEMENT.csv.gz'
+          assert source.is_file()
+          out=pathlib.Path('florida_pieces')
+          out.mkdir(exist_ok=True)
+          chunk=1500000
+          writer=None;fp=None;part=-1;count=0;groups=[]
+          with gzip.open(source,'rt',newline='',encoding='utf-8') as reader_file:
+            reader=csv.reader(reader_file)
+            header=next(reader)
+            for rec in reader:
+              if count%chunk==0:
+                if fp:fp.close()
+                part+=1
+                p=out/f'FL_PUBLIC_ADDRESSES_{part:02d}.csv.gz'
+                fp=gzip.open(p,'wt',newline='',encoding='utf-8',compresslevel=4)
+                writer=csv.writer(fp)
+                writer.writerow(header)
+                groups.append({'file':p.name,'records':0})
+              writer.writerow(rec)
+              groups[-1]['records']+=1
+              count+=1
+          if fp:fp.close()
+          assert count==audit['unique_public_address_records'], f'RECORD MISMATCH {count}'
+          result={'status':'VERIFIED_SOURCE_PARTITION','source_audit':audit,'source':'Overture 2026-10-21.0',
+                  'rows':count,'chunks':groups,'source_contains_customer_files':False,
+                  'provider_serviceability_verified':False,
+                  'note':'These are geographic address records, not an assertion of complete statewide coverage.'}
+          (out/'FL_PUBLIC_ADDRESS_PARTITION_AUDIT.json').write_text(json.dumps(result,indent=2))
+          print(json.dumps({'rows':count,'files':groups},indent=2))
+          PY
+      - name: Upload address partitions 00 to 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-public-address-parts-00-03
+          path: |
+            florida_pieces/FL_PUBLIC_ADDRESSES_00.csv.gz
+            florida_pieces/FL_PUBLIC_ADDRESSES_01.csv.gz
+            florida_pieces/FL_PUBLIC_ADDRESSES_02.csv.gz
+            florida_pieces/FL_PUBLIC_ADDRESSES_03.csv.gz
+            florida_pieces/FL_PUBLIC_ADDRESS_PARTITION_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload address partitions 04 to 08
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-public-address-parts-04-08
+          path: |
+            florida_pieces/FL_PUBLIC_ADDRESSES_04.csv.gz
+            florida_pieces/FL_PUBLIC_ADDRESSES_05.csv.gz
+            florida_pieces/FL_PUBLIC_ADDRESSES_06.csv.gz
+            florida_pieces/FL_PUBLIC_ADDRESSES_07.csv.gz
+            florida_pieces/FL_PUBLIC_ADDRESSES_08.csv.gz
+          if-no-files-found: error
+          retention-days: 14
