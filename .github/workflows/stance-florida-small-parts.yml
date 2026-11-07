@@ -1,0 +1,170 @@
+name: Export verified Florida records in small Google Drive-compatible pieces
+on:
+  push:
+    branches: [stance-fill-missing-states-20261107]
+    paths: ['.github/workflows/stance-florida-small-parts.yml']
+  pull_request:
+    branches: [internet4all-website]
+    paths: ['.github/workflows/stance-florida-small-parts.yml']
+  workflow_dispatch:
+jobs:
+  produce-verified-small-parts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions: {contents: read, actions: read}
+    steps:
+      - name: Fetch verified Florida 12,127,015 records from completed GitHub Actions run
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          mkdir -p previous
+          gh run download 42371006106 -R gamblerspassion/zipper1 -D previous
+          find previous -name 'FL_PUBLIC_ADDRESSES_*.csv.gz' | sort
+      - name: Repartition into 1,000,000-row files and validate total and provenance
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import csv,gzip,json
+          src=sorted(Path('previous').rglob('FL_PUBLIC_ADDRESSES_*.csv.gz'))
+          assert len(src)==9, 'Missing input source files'
+          target=Path('fl_small');target.mkdir(exist_ok=True)
+          expected=12127015
+          out=None;wr=None;n=0;parts=[];headers=None
+          for p in src:
+            with gzip.open(p,'rt',newline='',encoding='utf-8') as f:
+              r=csv.reader(f)
+              this_header=next(r)
+              if headers is None:headers=this_header
+              assert this_header==headers
+              for row in r:
+                if n%1000000==0:
+                  if out:out.close()
+                  index=len(parts)
+                  filename=f'FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_{index:02d}.csv.gz'
+                  out=gzip.open(target/filename,'wt',newline='',encoding='utf8',compresslevel=4)
+                  wr=csv.writer(out);wr.writerow(headers)
+                  parts.append({'filename':filename,'records':0})
+                wr.writerow(row);parts[-1]['records']+=1;n+=1
+          if out:out.close()
+          assert n==expected,(n,expected)
+          meta={'status':'VERIFIED_REPARTITION','count':n,'files':parts,'source':'Overture 2026-10-21.0','unverified_address_serviceability':True,
+           'not_cross_source_deduplicated':True,'contact_records_used':0}
+          (target/'FL_SOURCE_PARTS_AUDIT.json').write_text(json.dumps(meta,indent=2))
+          print(json.dumps(meta,indent=2))
+          PY
+      - name: Upload Florida public source addresses part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-verified-public-addresses-00
+          path: |
+            fl_small/FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_00.csv.gz
+            fl_small/FL_SOURCE_PARTS_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Florida public source addresses part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-verified-public-addresses-01
+          path: |
+            fl_small/FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_01.csv.gz
+            fl_small/FL_SOURCE_PARTS_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Florida public source addresses part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-verified-public-addresses-02
+          path: |
+            fl_small/FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_02.csv.gz
+            fl_small/FL_SOURCE_PARTS_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Florida public source addresses part 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-verified-public-addresses-03
+          path: |
+            fl_small/FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_03.csv.gz
+            fl_small/FL_SOURCE_PARTS_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Florida public source addresses part 04
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-verified-public-addresses-04
+          path: |
+            fl_small/FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_04.csv.gz
+            fl_small/FL_SOURCE_PARTS_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Florida public source addresses part 05
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-verified-public-addresses-05
+          path: |
+            fl_small/FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_05.csv.gz
+            fl_small/FL_SOURCE_PARTS_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Florida public source addresses part 06
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-verified-public-addresses-06
+          path: |
+            fl_small/FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_06.csv.gz
+            fl_small/FL_SOURCE_PARTS_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Florida public source addresses part 07
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-verified-public-addresses-07
+          path: |
+            fl_small/FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_07.csv.gz
+            fl_small/FL_SOURCE_PARTS_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Florida public source addresses part 08
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-verified-public-addresses-08
+          path: |
+            fl_small/FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_08.csv.gz
+            fl_small/FL_SOURCE_PARTS_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Florida public source addresses part 09
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-verified-public-addresses-09
+          path: |
+            fl_small/FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_09.csv.gz
+            fl_small/FL_SOURCE_PARTS_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Florida public source addresses part 10
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-verified-public-addresses-10
+          path: |
+            fl_small/FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_10.csv.gz
+            fl_small/FL_SOURCE_PARTS_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Florida public source addresses part 11
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-verified-public-addresses-11
+          path: |
+            fl_small/FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_11.csv.gz
+            fl_small/FL_SOURCE_PARTS_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload Florida public source addresses part 12
+        uses: actions/upload-artifact@v4
+        with:
+          name: FL-verified-public-addresses-12
+          path: |
+            fl_small/FL_OFFICIAL_SOURCE_PUBLIC_ADDRESS_12.csv.gz
+            fl_small/FL_SOURCE_PARTS_AUDIT.json
+          if-no-files-found: error
+          retention-days: 14
