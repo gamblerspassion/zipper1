@@ -3,6 +3,9 @@ on:
   push:
     branches: [stance-fill-missing-states-20261107]
     paths: ['.github/workflows/stance-five-state-address-gapfill.yml']
+  pull_request:
+    branches: [internet4all-website]
+    paths: ['.github/workflows/stance-five-state-address-gapfill.yml']
   workflow_dispatch:
 jobs:
   missing-state-public-address-verification:
