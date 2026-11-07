@@ -1,0 +1,112 @@
+name: Build actual nationwide USDOT NAD r24 street address records
+on:
+  push:
+    branches: [stance-national-address-source-20261107]
+    paths: ['.github/workflows/nad-full-national-real-records.yml']
+  workflow_dispatch:
+jobs:
+  national-nad-address-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reclaim unused runner disk for national ZIP
+        shell: bash
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/hostedtoolcache/CodeQL 2>/dev/null || true
+          df -h /
+      - name: Download complete official September 2026 NAD ZIP (8.48 GB)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p official_nad_download
+          curl --fail --location --retry 5 --retry-all-errors --retry-delay 10 --connect-timeout 60 --speed-time 180 --speed-limit 1024 --continue-at - \
+            --output official_nad_download/NAD_r24_TXT.zip \
+            'https://data.transportation.gov/download/fc2s-wawr/application/x-zip-compressed'
+          test -s official_nad_download/NAD_r24_TXT.zip
+          unzip -tq official_nad_download/NAD_r24_TXT.zip | tail -3
+          ls -lh official_nad_download/NAD_r24_TXT.zip
+      - name: Parse full government archive directly from ZIP into state gzip files
+        shell: bash
+        run: |
+          python3 -u tools/nad/import_nad_full.py official_nad_download/NAD_r24_TXT.zip nad-r24-all-states
+          test -s nad-r24-all-states/NAD_R24_AUDIT.json
+          python3 - <<'PY'
+          import json
+          a=json.load(open('nad-r24-all-states/NAD_R24_AUDIT.json'))
+          print('REAL PUBLIC ADDRESSES:',a['valid_rows'],'STATES:',len(a['states']))
+          assert a['valid_rows']>1_000_000, 'Do not claim a national database without actual nationwide rows.'
+          assert len(a['states'])>=40, 'Insufficient state coverage for national claim.'
+          PY
+      - name: Remove source archive after validation and partition finished
+        if: success()
+        run: |
+          rm -f official_nad_download/NAD_r24_TXT.zip
+          df -h /
+      - name: Group compressed state files into durable download artifacts
+        if: success()
+        shell: bash
+        run: |
+          mkdir -p nad-export/northeast nad-export/southeast nad-export/midwest nad-export/west nad-export/other
+          python3 - <<'PY'
+          import shutil, pathlib
+          root=pathlib.Path('nad-r24-all-states')
+          groups={
+            'northeast':'CT ME MA NH RI VT NJ NY PA DE MD DC',
+            'southeast':'AL FL GA KY MS NC SC TN VA WV AR LA OK TX',
+            'midwest':'IL IN IA KS MI MN MO NE ND OH SD WI',
+            'west':'AK AZ CA CO HI ID MT NV NM OR UT WA WY',
+          }
+          mapping={state:k for k,v in groups.items() for state in v.split()}
+          for p in root.glob('NAD_R24_*_REAL_ADDRESSES.csv.gz'):
+            state=p.name.split('_')[2]
+            d=pathlib.Path('nad-export')/mapping.get(state,'other')
+            shutil.move(p,d/p.name)
+          shutil.copy2(root/'NAD_R24_AUDIT.json','nad-export/NAD_R24_AUDIT.json')
+          for d in pathlib.Path('nad-export').iterdir():
+            if d.is_dir():print(d.name,len(list(d.iterdir())))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: NAD-r24-NATIONAL-SOURCE-AUDIT
+          path: nad-export/NAD_R24_AUDIT.json
+          if-no-files-found: error
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: NAD-r24-REAL-ADDRESSES-NORTHEAST
+          path: nad-export/northeast/
+          if-no-files-found: warn
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: NAD-r24-REAL-ADDRESSES-SOUTHEAST
+          path: nad-export/southeast/
+          if-no-files-found: warn
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: NAD-r24-REAL-ADDRESSES-MIDWEST
+          path: nad-export/midwest/
+          if-no-files-found: warn
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: NAD-r24-REAL-ADDRESSES-WEST
+          path: nad-export/west/
+          if-no-files-found: warn
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: NAD-r24-REAL-ADDRESSES-TERRITORIES
+          path: nad-export/other/
+          if-no-files-found: warn
+          retention-days: 3
