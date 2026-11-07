@@ -1,0 +1,47 @@
+name: Complete Overture supplemental extraction for five missing NAD states
+on:
+  push:
+    branches: [stance-fill-missing-states-20261107]
+    paths: ['.github/workflows/stance-full-five-state-address-gapfill.yml']
+  pull_request:
+    branches: [internet4all-website]
+    paths: ['.github/workflows/stance-full-five-state-address-gapfill.yml']
+  workflow_dispatch:
+jobs:
+  full-public-address-extraction:
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        state: [NH, MS, MI, NV, HI]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install geospatial tools
+        run: pip install -q overturemaps geopandas shapely pyogrio
+      - name: Run every Census-clipped tile for ${{ matrix.state }}
+        shell: bash
+        run: |
+          set +e
+          python3 -u tools/nad/overture_state_gapfill.py --state ${{ matrix.state }} --out state-gapfill --tile-size 1.5
+          CODE=$?
+          echo "EXTRACT_STATUS=${CODE}" >> "$GITHUB_ENV"
+          echo "Extractor exit=$CODE"
+          cat state-gapfill/state=${{ matrix.state }}/STATE_AUDIT.json || true
+          exit 0
+      - name: Upload source audits and state records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-state-addresses-${{ matrix.state }}
+          path: |
+            state-gapfill/state=${{ matrix.state }}/STATE_AUDIT.json
+            state-gapfill/state=${{ matrix.state }}/PROGRESS.json
+            state-gapfill/state=${{ matrix.state }}/OVERTURE_${{ matrix.state }}_SUPPLEMENT.csv.gz
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Fail incomplete states transparently
+        run: |
+          test "$EXTRACT_STATUS" = "0" || { echo 'Extraction incomplete; check state audit and retry missing tiles'; exit 1; }
