@@ -1,0 +1,55 @@
+name: Overture 2026 official public address records — sample
+on:
+  push:
+    branches: [stance-national-address-source-20261107]
+    paths: ['.github/workflows/overture-real-address-sample.yml']
+  pull_request:
+    branches: [internet4all-website]
+    paths: ['.github/workflows/overture-real-address-sample.yml']
+  workflow_dispatch:
+jobs:
+  sample-official-addresses:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Install official Overture client
+        run: pip install overturemaps pyarrow
+      - name: Download public government-independent address points (no customer input)
+        run: |
+          mkdir -p overture-address-sample
+          overturemaps download --bbox=-84.93,39.05,-84.80,39.15 -f geojson --type=address -o overture-address-sample/lawrenceburg_addresses.geojson
+          overturemaps download --bbox=-86.2,39.72,-86.1,39.82 -f geojson --type=address -o overture-address-sample/indianapolis_addresses.geojson
+      - name: Convert genuine records and audit provenance
+        run: |
+          python3 - <<'PY'
+          import os,json,csv
+          records=[]
+          audits=[]
+          for name in ['lawrenceburg','indianapolis']:
+              path=f'overture-address-sample/{name}_addresses.geojson'
+              data=json.load(open(path))
+              features=data['features'] if isinstance(data,dict) else []
+              kept=0
+              for feature in features:
+                  p=feature.get('properties') or {}
+                  g=feature.get('geometry') or {}
+                  coords=g.get('coordinates') or [None,None]
+                  records.append({'overture_id':feature.get('id') or p.get('id'),'geometry_longitude':coords[0] if len(coords)>0 else None,
+                    'geometry_latitude':coords[1] if len(coords)>1 else None,'properties_json':json.dumps(p,separators=(',',':')),
+                    'source_release':'Overture 2026-10-21.0','serviceability_status':'NOT_VERIFIED'})
+                  kept+=1
+              audits.append({'bbox':name,'actual_features':kept,'file_bytes':os.path.getsize(path)})
+          with open('overture-address-sample/real_public_addresses.csv','w',newline='') as f:
+              w=csv.DictWriter(f,fieldnames=['overture_id','geometry_longitude','geometry_latitude','properties_json','source_release','serviceability_status'])
+              w.writeheader();w.writerows(records)
+          with open('overture-address-sample/AUDIT.json','w') as f:json.dump({'count':len(records),'audits':audits,'uses_customer_records':False},f,indent=2)
+          print(json.dumps({'count':len(records),'audits':audits}))
+          if len(records)==0: raise SystemExit('No genuine address records; do not publish empty artifact')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: overture-2026-real-public-address-records
+          path: overture-address-sample/
+          retention-days: 7

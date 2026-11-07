@@ -1,0 +1,35 @@
+name: Official USDOT NAD archive connectivity test
+on:
+  push:
+    branches: [stance-national-address-source-20261107]
+    paths: ['.github/workflows/nad-official-archive-test.yml']
+  pull_request:
+    branches: [internet4all-website]
+    paths: ['.github/workflows/nad-official-archive-test.yml']
+  workflow_dispatch:
+jobs:
+  official-archive-source-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Verify official 2026 national ZIP download endpoint
+        shell: bash
+        run: |
+          set +e
+          URL='https://data.transportation.gov/download/fc2s-wawr/application/x-zip-compressed'
+          echo 'HEAD:'
+          curl -sSIL --retry 2 --connect-timeout 15 --max-time 70 -D headers.txt -o /dev/null "$URL"
+          echo "HEAD exit=$?"
+          cat headers.txt | grep -Ei 'HTTP/|content-length:|content-type:|location:|accept-ranges:' | tail -25
+          echo 'RANGE TEST (not whole archive):'
+          curl -sSL -r 0-65535 --retry 1 --connect-timeout 15 --max-time 65 -D rangeheaders.txt -o preview.bin "$URL"
+          echo "RANGE exit=$?"
+          cat rangeheaders.txt | grep -Ei 'HTTP/|content-length:|content-type:|content-range:|accept-ranges:' | tail -20
+          wc -c preview.bin || true
+          python3 - <<'PY'
+          from pathlib import Path
+          data=Path('preview.bin').read_bytes()[:8] if Path('preview.bin').exists() else b''
+          print('ZIP signature (expected PK):',data.hex(), data[:2]==b'PK')
+          PY

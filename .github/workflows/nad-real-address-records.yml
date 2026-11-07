@@ -1,0 +1,30 @@
+name: NAD r24 real public address records (sample across states)
+on:
+  push:
+    branches: [stance-national-address-source-20261107]
+    paths:
+      - 'tools/nad/**'
+      - '.github/workflows/nad-real-address-records.yml'
+  pull_request:
+    branches: [internet4all-website]
+    paths:
+      - 'tools/nad/**'
+      - '.github/workflows/nad-real-address-records.yml'
+  workflow_dispatch:
+jobs:
+  national-public-address-sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract real USDOT NAD r24 street addresses across US states
+        run: python3 tools/nad/extract_nad.py --max-per-state 1200 --workers 4 --output national-address-extract
+      - name: Upload source-bound address records and audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: nad-r24-real-public-address-records
+          path: national-address-extract/
+          if-no-files-found: error
+          retention-days: 30

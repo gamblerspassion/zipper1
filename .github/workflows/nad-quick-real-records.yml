@@ -1,0 +1,61 @@
+name: NAD real address sample - Ohio and Indiana
+on:
+  push:
+    branches: [stance-national-address-source-20261107]
+    paths: ['.github/workflows/nad-quick-real-records.yml']
+  pull_request:
+    branches: [internet4all-website]
+    paths: ['.github/workflows/nad-quick-real-records.yml']
+  workflow_dispatch:
+jobs:
+  public-real-records:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Read real USDOT public address API and verify records
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import csv,json,urllib.request,urllib.parse,time,os
+          root='https://services.arcgis.com/xOi1kZaI0eWDREZv/ArcGIS/rest/services/Address_Points_from_National_Address_Database_view/FeatureServer/0/query'
+          os.makedirs('nad-real-records',exist_ok=True)
+          rows=[]
+          audits=[]
+          for z in ['45240','47025','46143','46201']:
+              q={'where':"Zip_Code='"+z+"' AND AddNo_Full IS NOT NULL AND StNam_Full IS NOT NULL",
+                 'outFields':'OBJECTID,AddNo_Full,StNam_Full,Post_City,State,Zip_Code,Longitude,Latitude,Addr_Type,Lifecycle,UUID',
+                 'returnGeometry':'false','f':'json','resultRecordCount':250,'orderByFields':'OBJECTID ASC'}
+              try:
+                  url=root+'?'+urllib.parse.urlencode(q)
+                  with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'Stance-NAD-OpenData-Audit/1.0'}),timeout=55) as response:
+                      result=json.load(response)
+                  if 'error' in result: raise Exception(str(result['error']))
+                  found=0
+                  for feat in result.get('features',[]):
+                      a=feat.get('attributes',{})
+                      if a.get('AddNo_Full') and a.get('StNam_Full'):
+                          rows.append({'object_id':a.get('OBJECTID'),'house_number':a.get('AddNo_Full'),
+                              'street':a.get('StNam_Full'),'city':a.get('Post_City'),
+                              'state':a.get('State'),'zip':a.get('Zip_Code'),
+                              'lon':a.get('Longitude'),'lat':a.get('Latitude'),
+                              'source':'USDOT NAD r24 2026-09-30',
+                              'provider_qualification':'NOT_VERIFIED'})
+                          found+=1
+                  audits.append({'zip':z,'actual_records':found,'error':None})
+              except Exception as e:
+                  audits.append({'zip':z,'actual_records':0,'error':str(e)})
+          with open('nad-real-records/real_usdot_addresses.csv','w',newline='') as f:
+              w=csv.DictWriter(f,fieldnames=['object_id','house_number','street','city','state','zip','lon','lat','source','provider_qualification'])
+              w.writeheader()
+              w.writerows(rows)
+          with open('nad-real-records/source-audit.json','w') as f:json.dump({'count':len(rows),'audits':audits},f,indent=2)
+          print(json.dumps({'count':len(rows),'audits':audits},indent=2))
+          if not rows:raise SystemExit('No actual USDOT address records returned')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nad-r24-real-ohio-indiana-address-records
+          path: nad-real-records/
+          retention-days: 30
