@@ -1,0 +1,35 @@
+name: Real public OpenStreetMap addresses for NAD gap states
+on:
+  push:
+    branches: [stance-fill-missing-states-20261107]
+    paths: ['.github/workflows/stance-osm-gap-addresses.yml']
+  pull_request:
+    branches: [internet4all-website]
+    paths: ['.github/workflows/stance-osm-gap-addresses.yml']
+  workflow_dispatch:
+jobs:
+  public-osm-address-extraction:
+    strategy:
+      fail-fast: false
+      matrix:
+        state: [HI, NH, NV, MI, MS]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OSM data reader
+        run: pip install -q osmium
+      - name: Download official Geofabrik state extract, validate actual addresses
+        shell: bash
+        run: python3 -u tools/nad/osm_state_address_extract.py --state ${{ matrix.state }} --output state-osm
+      - name: Upload valid public address data and verification manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openstreetmap-state-addresses-${{ matrix.state }}
+          path: |
+            state-osm/state=${{ matrix.state }}/OSM_ADDRESS_AUDIT.json
+            state-osm/state=${{ matrix.state }}/OSM_${{ matrix.state }}_ADDRESSES.csv.gz
+          if-no-files-found: warn
+          retention-days: 14

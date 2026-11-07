@@ -1,0 +1,44 @@
+name: Repair severely undercovered NAD states using public address sources
+on:
+  push:
+    branches: [stance-fill-missing-states-20261107]
+    paths: ['.github/workflows/stance-sparse-states-gapfill.yml']
+  pull_request:
+    branches: [internet4all-website]
+    paths: ['.github/workflows/stance-sparse-states-gapfill.yml']
+  workflow_dispatch:
+jobs:
+  public-address-extraction:
+    strategy:
+      fail-fast: false
+      matrix:
+        state: [FL, GA, SC]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extractor dependencies
+        run: pip install -q overturemaps geopandas shapely pyogrio
+      - name: Extract real public addresses from every state tile
+        shell: bash
+        run: |
+          set +e
+          python3 -u tools/nad/overture_state_gapfill.py --state ${{ matrix.state }} --out state-gapfill --tile-size 1.5
+          CODE=$?
+          echo "EXTRACT_STATUS=$CODE" >> "$GITHUB_ENV"
+          cat state-gapfill/state=${{ matrix.state }}/STATE_AUDIT.json || true
+          exit 0
+      - name: Upload source audit and address supplement
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sparse-state-addresses-${{ matrix.state }}
+          path: |
+            state-gapfill/state=${{ matrix.state }}/STATE_AUDIT.json
+            state-gapfill/state=${{ matrix.state }}/PROGRESS.json
+            state-gapfill/state=${{ matrix.state }}/OVERTURE_${{ matrix.state }}_SUPPLEMENT.csv.gz
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Mark incomplete extraction as failed
+        run: test "$EXTRACT_STATUS" = "0"
